@@ -1,0 +1,13 @@
+{
+    "name": "Check Downloads",
+    "description": "Really Simple Extension",
+    "version": "1",
+    "manifest_version": 3,
+    "permissions": ["downloads"],
+    "action": {
+        "default_popup": "hello.html"
+    },
+    "background": {
+        "service_worker": "background.js"
+    }
+}
