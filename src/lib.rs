@@ -23,8 +23,16 @@ pub mod odm {
         resp
     }
 
-    pub fn dowload_from_url_to(url: Url, file: &mut File) {
-        let body_bytes = make_request(url).bytes().unwrap();
+    fn get_filename(url: &Url) -> Result<String, ()>{
+        if let Some(filename) = url.path_segments().and_then(|s| s.last()) {
+            Ok(filename.to_string())
+        } else {
+            panic!("No filename fonud in url");
+        }
+    }
+
+    pub fn dowload_from_url_to(url: &Url, file: &mut File) {
+        let body_bytes = make_request(url.clone()).bytes().unwrap();
 
         match file.write_all(&body_bytes[..]) {
             Ok(_) => (),
@@ -32,7 +40,8 @@ pub mod odm {
         }
     }
 
-    pub fn get_path(filename: &str) -> String {
+    pub fn get_path(url: &Url) -> String {
+        let filename = get_filename(url).unwrap();
         let pathname;
         if let Some(p) = dirs::download_dir() {
             pathname = format!("{}/{}", p.to_str().unwrap(), filename);
