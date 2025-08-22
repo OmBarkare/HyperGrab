@@ -3,7 +3,7 @@
     "description": "Really Simple Extension",
     "version": "1",
     "manifest_version": 3,
-    "permissions": ["downloads"],
+    "permissions": [  "downloads","downloads.open","downloads.shelf"],
     "action": {
         "default_popup": "hello.html"
     },

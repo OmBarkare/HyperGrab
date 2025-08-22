@@ -1,6 +1,7 @@
 pub mod odm {
     use reqwest::header::{ACCEPT, HeaderValue, USER_AGENT};
     use std::env;
+    use std::net::TcpListener;
     use std::{fs::File, io::Write};
     use url::Url;
 
@@ -23,7 +24,7 @@ pub mod odm {
         resp
     }
 
-    fn get_filename(url: &Url) -> Result<String, ()>{
+    fn get_filename(url: &Url) -> Result<String, ()> {
         if let Some(filename) = url.path_segments().and_then(|s| s.last()) {
             Ok(filename.to_string())
         } else {
@@ -53,5 +54,49 @@ pub mod odm {
             );
         }
         pathname
+    }
+}
+
+pub mod dmserver {
+    use std::{
+        io::{Read, Write},
+        net::TcpListener,
+    };
+
+    fn parse_for_dwlink(request: String) -> String {
+        //seperate header and body
+        let split_req: Vec<&str> = request.split("\r\n\r\n").collect();
+        dbg!(&split_req);
+        let body = split_req[1];
+        let body = body.trim_matches('\0').trim();
+        let link = format!("{body}");
+
+        link
+    }
+
+    pub fn handle_request(listener: TcpListener) -> Result<String, ()> {
+
+        for stream in listener.incoming() {
+            let mut stream = stream.unwrap();
+            let mut buffer = vec![0u8; 2048];
+
+            let _ = stream.read(&mut buffer).unwrap();
+
+            let request = String::from_utf8(buffer).unwrap();
+
+            if request.starts_with("OPTION") {
+                let response = "HTTP/1.1 200 OK\r\n\
+                Access-Control-Allow-Origin: *\r\n\
+                Access-Control-Allow-Headers: Content-Type\r\n\
+                Access-Control-Allow-Methods: POST\r\n\r\n";
+
+                let _ = stream.write(response.as_bytes()).unwrap();
+                println!("Got OPTIONS request");
+            } else if request.starts_with("POST") {
+                println!("Got POST request");
+                return Ok(parse_for_dwlink(request));
+            }
+        }
+        Err(())
     }
 }
