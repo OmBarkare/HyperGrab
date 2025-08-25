@@ -7,3 +7,4 @@ edition = "2024"
 reqwest = {version = "0.12.23", default-features = false, features = ["rustls-tls", "blocking"]}
 url = "2.5.4"
 dirs = "6.0.0"
+anyhow = "1.0"
