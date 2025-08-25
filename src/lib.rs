@@ -31,6 +31,7 @@ pub mod odm {
         }
     }
 
+    #[derive(Debug)]
     pub struct FileInfo {
         pub size: u64,
         pub supports_ranges: bool,

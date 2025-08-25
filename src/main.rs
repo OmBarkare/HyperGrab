@@ -1,5 +1,6 @@
 use project1::dmserver;
 use project1::odm;
+use project1::odm::dowload_from_url_to;
 use std::net::TcpListener;
 use std::str::FromStr;
 use std::{env, fs::File};
@@ -16,21 +17,19 @@ fn main() {
     println!("Got download link: {:?}", url);
     let url = Url::from_str(&url).unwrap();
 
-    //create file
-    let mut pathname = odm::get_path(&url);
 
-    //download to file
-    if let Some(p) = dirs::download_dir() {
-        pathname = format!("{}/{}", p.to_str().unwrap(), filename);
-    } else {
-        pathname = format!(
-            "{}/{}",
-            env::current_dir().unwrap().to_str().unwrap(),
-            filename
-        );
+    match odm::get_file_info(&url) {
+        Ok(file_info) => {
+            dbg!(&file_info);
+
+            let mut file = File::create(format!("{}/{}", dirs::download_dir().unwrap().to_str().unwrap(), filename)).unwrap();
+            dowload_from_url_to(&url, &mut file);
+
+            println!("Download complete!");
+        },
+
+        Err(e) => {
+            println!("Error occured: {}", e);
+        }
     }
-    let mut file = File::create(&pathname).unwrap();
-    odm::dowload_from_url_to(&url, &mut file);
-
-    println!("saving to {}", &pathname);
 }
