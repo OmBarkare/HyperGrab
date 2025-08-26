@@ -1,9 +1,10 @@
 {
     "name": "Check Downloads",
-    "description": "Really Simple Extension",
+    "description": "DISCO",
     "version": "1",
     "manifest_version": 3,
-    "permissions": [  "downloads","downloads.open","downloads.shelf"],
+    "permissions": [  "downloads","downloads.open","downloads.shelf", "webRequest"],
+    "host_permissions": ["*://*/*"],
     "action": {
         "default_popup": "hello.html"
     },
