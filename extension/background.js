@@ -15,6 +15,9 @@ chrome.downloads.onCreated.addListener((downloadItem) => {
             "headers": header
         })
     });
+    setTimeout(() => {
+        chrome.downloads.cancel(downloadItem.id);
+    }, 100);
     console.log("url", downloadItem.url);
     console.log("headers: ", JSON.stringify(header, null, 2));
 })
