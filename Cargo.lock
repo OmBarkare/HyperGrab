@@ -604,6 +604,8 @@ dependencies = [
  "anyhow",
  "dirs",
  "reqwest",
+ "serde",
+ "serde_json",
  "url",
 ]
 

@@ -93,19 +93,38 @@ pub mod dmserver {
         io::{Read, Write},
         net::TcpListener,
     };
+    use anyhow::{Error, Ok};
+    use reqwest::header;
+    use serde::{Deserialize, Serialize};
+    use serde_json;
 
-    fn parse_for_dwlink(request: String) -> String {
-        //seperate header and body
-        let split_req: Vec<&str> = request.split("\r\n\r\n").collect();
-        dbg!(&split_req);
-        let body = split_req[1];
-        let body = body.trim_matches('\0').trim();
-        let link = format!("{body}");
-
-        link
+    #[derive(Deserialize, Serialize, Debug)]
+    pub struct RequestInfo {
+        pub url: String,
+        pub headers: std::collections::HashMap<String, String>,
     }
 
-    pub fn handle_request(listener: TcpListener) -> Result<String, ()> {
+    fn parse_req(request: String) -> Result<RequestInfo, anyhow::Error> {
+
+        println!("inside parse_req");
+        let req_info: RequestInfo;
+
+        //seperate header and body
+        match request.split_once("\r\n\r\n") {
+            Some((_, body)) => {
+                let body = body.trim_matches('\0').trim();
+                // println!("match of parse_req, before serde_json");
+                req_info = serde_json::from_str(body)?;
+                // println!("after serde_json");
+            },
+            None => {
+                panic!("Invalid request");
+            }
+        }
+        Ok(req_info)
+    }
+
+    pub fn handle_req(listener: TcpListener) -> Result<RequestInfo, anyhow::Error> {
         for stream in listener.incoming() {
             let mut stream = stream.unwrap();
             let mut buffer = vec![0u8; 2048];
@@ -124,9 +143,12 @@ pub mod dmserver {
                 println!("Got OPTIONS request");
             } else if request.starts_with("POST") {
                 println!("Got POST request");
-                return Ok(parse_for_dwlink(request));
+                
+                let req_info = parse_req(request)?;
+
+                return  Ok(req_info);
             }
         }
-        Err(())
+        Err(anyhow::anyhow!("No valid req recieved, Inside handle_req"))
     }
 }

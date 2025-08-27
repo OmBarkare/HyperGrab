@@ -8,7 +8,7 @@ chrome.downloads.onCreated.addListener((downloadItem) => {
     fetch("http://127.0.0.1:7878", {
         method: "POST",
         headers: {
-            "Content-Type": "text/plain"
+            "Content-Type": "application/json"
         },
         body: JSON.stringify({
             "url": downloadItem.url,
@@ -33,6 +33,8 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
     (details) => {
         handler(details);
     },
-    { urls: ["<all_urls>"] },
+    { urls: ["*://*/*"] },
     ["requestHeaders"]
 );
+
+// *://*/* --> this says that look for any requests.. with any protocol http or https, with any path, and any body
