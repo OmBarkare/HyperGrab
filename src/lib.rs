@@ -1,7 +1,7 @@
 pub mod odm {
     use anyhow::Ok;
     use reqwest::blocking::Client;
-    use reqwest::header::{HeaderName, HeaderValue, ACCEPT, REFERER, USER_AGENT};
+    use reqwest::header::{HeaderName, HeaderValue};
     use std::env;
     use std::str::FromStr;
     use std::{fs::File, io::Write};
@@ -9,23 +9,36 @@ pub mod odm {
 
     use crate::dmserver::RequestInfo;
 
-    fn make_http_client() -> Result<reqwest::blocking::Client, anyhow::Error> {
-        let mut headers = reqwest::header::HeaderMap::new();
-        headers.insert(USER_AGENT, HeaderValue::from_static("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"));
-        headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
-        headers.insert(REFERER, HeaderValue::from_static("https://pixabay.com/"));
+    fn make_http_client(req_info: &RequestInfo) -> Result<reqwest::blocking::Client, anyhow::Error> {;
+        // headers.insert(USER_AGENT, HeaderValue::from_static("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"));
+        // headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
+        // headers.insert(REFERER, HeaderValue::from_static("https://pixabay.com/"));
 
-        let client = reqwest::blocking::Client::builder()
-            .default_headers(headers)
-            .build()?;
+        let mut http_request_builder = reqwest::blocking::ClientBuilder::new();
+        let mut headers = reqwest::header::HeaderMap::new();
+
+        let browser_headers = &req_info.headers;
+        for (h, v) in browser_headers {
+            if h.eq_ignore_ascii_case("host")
+                || h.eq_ignore_ascii_case("content-length")
+                || h.eq_ignore_ascii_case("transfer-encoding")
+            {
+                continue;
+            }
+
+            headers.insert(
+                HeaderName::from_str(h).unwrap(),
+                HeaderValue::from_str(v).unwrap(),
+            );
+        }
+
+        println!("THESE ARE NEW HEADERS: ");
+        dbg!(&headers);
+
+        http_request_builder = http_request_builder.default_headers(headers);
+        let client = http_request_builder.build()?;
 
         Ok(client)
-    }
-
-    fn make_request(url: Url, client: Client) -> reqwest::blocking::Response {
-        let resp = client.get(url.as_str()).send().unwrap();
-
-        resp
     }
 
     fn get_filename(url: &Url) -> Result<String, anyhow::Error> {
@@ -42,29 +55,9 @@ pub mod odm {
         pub supports_ranges: bool,
     }
 
-    pub fn get_file_info(req_info: RequestInfo) -> Result<FileInfo, anyhow::Error> {
-        let mut http_request_builder = reqwest::blocking::ClientBuilder::new();
-        let mut headers = reqwest::header::HeaderMap::new();
-
-        let browser_headers = &req_info.headers;
-        for (h, v) in browser_headers {
-            if h.eq_ignore_ascii_case("host")
-                || h.eq_ignore_ascii_case("content-length")
-                || h.eq_ignore_ascii_case("transfer-encoding")
-            {
-                continue;
-            }
-
-            headers.insert(HeaderName::from_str(h).unwrap(), HeaderValue::from_str(v).unwrap());
-        }
-
-        println!("THESE ARE NEW HEADERS: ");
-        dbg!(&headers);
-
-        http_request_builder = http_request_builder.default_headers(headers);
-        let client = http_request_builder.build()?;
-
-        let resp = client.head(req_info.url).send()?;
+    pub fn get_file_info(req_info: &RequestInfo) -> Result<FileInfo, anyhow::Error> {
+        let client = make_http_client(&req_info).unwrap();
+        let resp = client.head(req_info.url.clone()).send()?;
 
         if !resp.status().is_success() {
             anyhow::bail!("Server responded with error {}", resp.status());
@@ -77,7 +70,11 @@ pub mod odm {
                 .unwrap_or(0);
 
             println!("Content-length: {}", content_len);
-            let supports_ranges = headers.get("ACCEPT_RANGES").unwrap().to_str().unwrap();
+            println!(
+                "accept-ranges: {}",
+                headers.get("ACCEPT-RANGES").unwrap().to_str().unwrap()
+            );
+            let supports_ranges = headers.get("ACCEPT-RANGES").unwrap().to_str().unwrap();
             let supports_ranges = if supports_ranges.eq_ignore_ascii_case("bytes") {
                 true
             } else {
@@ -95,9 +92,10 @@ pub mod odm {
         }
     }
 
-    pub fn dowload_from_url_to(url: &Url, file: &mut File) {
-        let client = make_http_client().unwrap();
-        let body_bytes = make_request(url.clone(), client).bytes().unwrap();
+    pub fn dowload_from_url_to(req_info: &RequestInfo, file_info: FileInfo, file: &mut File) {
+        let client = make_http_client(req_info).unwrap();
+        let resp = client.get(req_info.url.clone()).send().unwrap();
+        let body_bytes = resp.bytes().unwrap();
 
         file.write_all(&body_bytes[..]).unwrap();
     }

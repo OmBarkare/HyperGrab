@@ -31,16 +31,16 @@ fn main() {
             println!("{:?}",e)
         },
     }
-    println!("Got download link: {:?}", req_info);
+    println!("Got download link: {:?}", &req_info);
     // let url = Url::from_str(&url).unwrap();
 
 
-    match odm::get_file_info(req_info) {
+    match odm::get_file_info(&req_info) {
         Ok(file_info) => {
             dbg!(&file_info);
 
-            // let mut file = File::create(format!("{}/{}", dirs::download_dir().unwrap().to_str().unwrap(), filename)).unwrap();
-            // dowload_from_url_to(&url, &mut file);
+            let mut file = File::create(format!("{}/{}", dirs::download_dir().unwrap().to_str().unwrap(), filename)).unwrap();
+            dowload_from_url_to(&req_info, file_info, &mut file);
 
             println!("Download complete!");
         },
