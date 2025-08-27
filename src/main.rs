@@ -1,14 +1,9 @@
 //Next Steps: Make request handlesr server on another thread, so that it is active and does not close after a single request is sent.
 
 
-use project1::dmserver;
-use project1::dmserver::RequestInfo;
-use project1::odm;
-use project1::odm::dowload_from_url_to;
+use project1::{dmserver, odm, dmserver::RequestInfo, odm::dowload_from_url_to};
 use std::net::TcpListener;
-use std::str::FromStr;
 use std::{env, fs::File};
-use url::Url;
 use std::thread;
 
 fn main() {

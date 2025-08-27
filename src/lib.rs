@@ -1,6 +1,5 @@
 pub mod odm {
     use anyhow::Ok;
-    use reqwest::blocking::Client;
     use reqwest::header::{HeaderName, HeaderValue};
     use std::env;
     use std::str::FromStr;
@@ -118,7 +117,6 @@ pub mod odm {
 
 pub mod dmserver {
     use anyhow::{Error, Ok};
-    use reqwest::header;
     use serde::{Deserialize, Serialize};
     use serde_json;
     use std::{
