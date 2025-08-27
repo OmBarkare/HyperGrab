@@ -1,10 +1,13 @@
 pub mod odm {
     use anyhow::Ok;
-    use reqwest::header::{HeaderValue, ACCEPT, REFERER, USER_AGENT};
     use reqwest::blocking::Client;
+    use reqwest::header::{HeaderName, HeaderValue, ACCEPT, REFERER, USER_AGENT};
     use std::env;
+    use std::str::FromStr;
     use std::{fs::File, io::Write};
     use url::Url;
+
+    use crate::dmserver::RequestInfo;
 
     fn make_http_client() -> Result<reqwest::blocking::Client, anyhow::Error> {
         let mut headers = reqwest::header::HeaderMap::new();
@@ -12,12 +15,14 @@ pub mod odm {
         headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
         headers.insert(REFERER, HeaderValue::from_static("https://pixabay.com/"));
 
-        let client = reqwest::blocking::Client::builder().default_headers(headers).build()?;
+        let client = reqwest::blocking::Client::builder()
+            .default_headers(headers)
+            .build()?;
 
         Ok(client)
     }
 
-    fn make_request(url: Url,client: Client) -> reqwest::blocking::Response {
+    fn make_request(url: Url, client: Client) -> reqwest::blocking::Response {
         let resp = client.get(url.as_str()).send().unwrap();
 
         resp
@@ -25,7 +30,7 @@ pub mod odm {
 
     fn get_filename(url: &Url) -> Result<String, anyhow::Error> {
         if let Some(filename) = url.path_segments().and_then(|s| s.last()) {
-            return Ok(filename.to_string())
+            return Ok(filename.to_string());
         } else {
             panic!("No filename fonud in url");
         }
@@ -37,31 +42,56 @@ pub mod odm {
         pub supports_ranges: bool,
     }
 
-    pub fn get_file_info(url: &Url) -> Result<FileInfo, anyhow::Error> {
+    pub fn get_file_info(req_info: RequestInfo) -> Result<FileInfo, anyhow::Error> {
         let mut http_request_builder = reqwest::blocking::ClientBuilder::new();
         let mut headers = reqwest::header::HeaderMap::new();
-        headers.insert(USER_AGENT, HeaderValue::from_static("Mozilla/5.0"));
-        headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
+
+        let browser_headers = &req_info.headers;
+        for (h, v) in browser_headers {
+            if h.eq_ignore_ascii_case("host")
+                || h.eq_ignore_ascii_case("content-length")
+                || h.eq_ignore_ascii_case("transfer-encoding")
+            {
+                continue;
+            }
+
+            headers.insert(HeaderName::from_str(h).unwrap(), HeaderValue::from_str(v).unwrap());
+        }
+
+        println!("THESE ARE NEW HEADERS: ");
+        dbg!(&headers);
 
         http_request_builder = http_request_builder.default_headers(headers);
         let client = http_request_builder.build()?;
 
-        let resp = client.head(url.as_str()).send()?;
+        let resp = client.head(req_info.url).send()?;
 
         if !resp.status().is_success() {
             anyhow::bail!("Server responded with error {}", resp.status());
         } else {
             let headers = resp.headers();
-            let content_len:u64 = headers.get("CONTENT_LENGTH").and_then(|v| v.to_str().ok()).and_then(|v| v.trim().parse().ok()).unwrap_or(0);
+            let content_len: u64 = headers
+                .get("CONTENT-LENGTH")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| v.trim().parse().ok())
+                .unwrap_or(0);
 
+            println!("Content-length: {}", content_len);
             let supports_ranges = headers.get("ACCEPT_RANGES").unwrap().to_str().unwrap();
-            let supports_ranges = if supports_ranges == "bytes" {true} else {false};
+            let supports_ranges = if supports_ranges.eq_ignore_ascii_case("bytes") {
+                true
+            } else {
+                false
+            };
 
             if content_len == 0 {
                 anyhow::bail!("content length is zero");
             }
 
-            Ok(FileInfo { size: content_len, supports_ranges: supports_ranges })
+            Ok(FileInfo {
+                size: content_len,
+                supports_ranges: supports_ranges,
+            })
         }
     }
 
@@ -89,14 +119,15 @@ pub mod odm {
 }
 
 pub mod dmserver {
-    use std::{
-        io::{BufReader, Read, Write},
-        net::TcpListener,
-    };
     use anyhow::{Error, Ok};
     use reqwest::header;
     use serde::{Deserialize, Serialize};
     use serde_json;
+    use std::{
+        io::{Read, Write},
+        net::TcpListener,
+        thread,
+    };
 
     #[derive(Deserialize, Serialize, Debug)]
     pub struct RequestInfo {
@@ -105,7 +136,6 @@ pub mod dmserver {
     }
 
     fn parse_req(request: String) -> Result<RequestInfo, anyhow::Error> {
-
         println!("inside parse_req");
         let req_info: RequestInfo;
 
@@ -116,15 +146,15 @@ pub mod dmserver {
                 // println!("match of parse_req, before serde_json");
                 req_info = serde_json::from_str(body)?;
                 // println!("after serde_json");
-            },
+            }
             None => {
                 panic!("Invalid request");
             }
         }
         Ok(req_info)
     }
-
-    pub fn handle_req(listener: TcpListener) -> Result<RequestInfo, anyhow::Error> {
+    //make a struct which has the handle and the reciever for this listener thread
+    pub fn start_listening(listener: TcpListener) -> Result<RequestInfo, anyhow::Error> {
         for stream in listener.incoming() {
             let mut stream = stream.unwrap();
             let mut buffer = vec![0u8; 16384];
@@ -135,18 +165,18 @@ pub mod dmserver {
 
             if request.starts_with("OPTION") {
                 let response = "HTTP/1.1 200 OK\r\n\
-                Access-Control-Allow-Origin: *\r\n\
-                Access-Control-Allow-Headers: Content-Type\r\n\
-                Access-Control-Allow-Methods: POST\r\n\r\n";
+                        Access-Control-Allow-Origin: *\r\n\
+                        Access-Control-Allow-Headers: Content-Type\r\n\
+                        Access-Control-Allow-Methods: POST\r\n\r\n";
 
                 let _ = stream.write(response.as_bytes()).unwrap();
                 println!("Got OPTIONS request");
             } else if request.starts_with("POST") {
                 println!("Got POST request");
-                
+
                 let req_info = parse_req(request)?;
 
-                return  Ok(req_info);
+                return Ok(req_info);
             }
         }
         Err(anyhow::anyhow!("No valid req recieved, Inside handle_req"))
