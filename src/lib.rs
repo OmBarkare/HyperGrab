@@ -36,7 +36,7 @@ pub mod odm {
         dbg!(&headers);
 
         http_request_builder = http_request_builder.default_headers(headers);
-        let client = http_request_builder.build()?;
+        let client = http_request_builder.timeout(None).build()?;
 
         Ok(client)
     }
