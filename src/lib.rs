@@ -90,7 +90,7 @@ pub mod odm {
 
 pub mod dmserver {
     use std::{
-        io::{Read, Write},
+        io::{BufReader, Read, Write},
         net::TcpListener,
     };
     use anyhow::{Error, Ok};
@@ -127,8 +127,8 @@ pub mod dmserver {
     pub fn handle_req(listener: TcpListener) -> Result<RequestInfo, anyhow::Error> {
         for stream in listener.incoming() {
             let mut stream = stream.unwrap();
-            let mut buffer = vec![0u8; 2048];
-
+            let mut buffer = vec![0u8; 16384];
+            // let mut buffer = BufReader::new();
             let _ = stream.read(&mut buffer).unwrap();
 
             let request = String::from_utf8(buffer).unwrap();
