@@ -2,13 +2,16 @@ pub mod odm {
     use anyhow::Ok;
     use reqwest::header::{HeaderName, HeaderValue};
     use std::env;
+    use std::io::{Seek, SeekFrom};
     use std::str::FromStr;
     use std::{fs::File, io::Write};
     use url::Url;
 
     use crate::dmserver::RequestInfo;
 
-    fn make_http_client(req_info: &RequestInfo) -> Result<reqwest::blocking::Client, anyhow::Error> {;
+    fn make_http_client(
+        req_info: &RequestInfo,
+    ) -> Result<reqwest::blocking::Client, anyhow::Error> {
         // headers.insert(USER_AGENT, HeaderValue::from_static("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"));
         // headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
         // headers.insert(REFERER, HeaderValue::from_static("https://pixabay.com/"));
@@ -36,6 +39,34 @@ pub mod odm {
 
         http_request_builder = http_request_builder.default_headers(headers);
         let client = http_request_builder.timeout(None).build()?;
+
+        Ok(client)
+    }
+
+    fn make_http_client_async(req_info: &RequestInfo) -> Result<reqwest::Client, anyhow::Error> {
+        let mut http_request_builder = reqwest::ClientBuilder::new();
+        let mut headers = reqwest::header::HeaderMap::new();
+
+        let browser_headers = &req_info.headers;
+        for (h, v) in browser_headers {
+            if h.eq_ignore_ascii_case("host")
+                || h.eq_ignore_ascii_case("content-length")
+                || h.eq_ignore_ascii_case("transfer-encoding")
+            {
+                continue;
+            }
+
+            headers.insert(
+                HeaderName::from_str(h).unwrap(),
+                HeaderValue::from_str(v).unwrap(),
+            );
+        }
+
+        println!("THESE ARE NEW HEADERS: ");
+        dbg!(&headers);
+
+        http_request_builder = http_request_builder.default_headers(headers);
+        let client = http_request_builder.build()?;
 
         Ok(client)
     }
@@ -91,12 +122,30 @@ pub mod odm {
         }
     }
 
-    pub fn dowload_from_url_to(req_info: &RequestInfo, file_info: FileInfo, file: &mut File) {
+    pub fn dowload_from_url_to(req_info: &RequestInfo, file: &mut File) {
         let client = make_http_client(req_info).unwrap();
         let resp = client.get(req_info.url.clone()).send().unwrap();
         let body_bytes = resp.bytes().unwrap();
 
         file.write_all(&body_bytes[..]).unwrap();
+    }
+
+    pub fn download_chunk(mut req_info: RequestInfo, start: u64, end: u64, file_path: &String) {
+        let mut headers = req_info.headers.clone();
+        headers.insert("range".to_string(), format!("bytes={start}-{end}"));
+        req_info.headers = headers;
+        let client = make_http_client(&req_info).unwrap();
+        println!("SENDING CHUNK DOWNLOAD WITH HEADERS: {:?}", &req_info.headers);
+        let resp = client.get(&req_info.url).send().unwrap();
+
+        let resp_bytes = resp.bytes().unwrap();
+
+        //Open the file with write permissions
+        let mut file = std::fs::OpenOptions::new().write(true).open(file_path).unwrap();
+        //seek the handler to the chunk size
+        file.seek(SeekFrom::Start(start)).unwrap();
+
+        file.write_all(&resp_bytes).unwrap();
     }
 
     pub fn get_path(url: &Url) -> String {
@@ -120,12 +169,10 @@ pub mod dmserver {
     use serde::{Deserialize, Serialize};
     use serde_json;
     use std::{
-        io::{Read, Write},
-        net::TcpListener,
-        thread,
+        clone, io::{Read, Write}, net::TcpListener, thread
     };
 
-    #[derive(Deserialize, Serialize, Debug)]
+    #[derive(Deserialize, Serialize, Debug, Clone)]
     pub struct RequestInfo {
         pub url: String,
         pub headers: std::collections::HashMap<String, String>,
