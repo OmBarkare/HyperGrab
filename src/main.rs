@@ -3,7 +3,8 @@
 use project1::odm::download_chunk;
 use project1::{dmserver, dmserver::RequestInfo, odm, odm::dowload_from_url_to};
 use std::net::TcpListener;
-use std::thread;
+use std::thread::{self, sleep};
+use std::time::Duration;
 use std::{env, fs::File};
 
 fn main() {
@@ -57,8 +58,18 @@ fn main() {
                 let file_path_clone = file_path.clone();
 
                 let handle = thread::spawn(move || {
-                    println!("Opening thread {i}");
-                    download_chunk(req_info_clone, start, end, &file_path_clone);
+                    println!("Thread {i}: {} - {}", start, end);
+                    let req_info_clone2 = req_info_clone.clone();
+                    match download_chunk(req_info_clone, start, end, &file_path_clone) {
+                        Ok(_) => {
+                            println!("success for thread {i}");
+                        }
+                        Err(_) => {
+                            sleep(Duration::from_secs(6));
+                            println!("retrying for thread {i}");
+                            download_chunk(req_info_clone2, start, end, &file_path_clone).unwrap();
+                        }
+                    }
                 });
 
                 thread_handles.push(handle);

@@ -1,5 +1,5 @@
 pub mod odm {
-    use anyhow::Ok;
+    use anyhow;
     use reqwest::header::{HeaderName, HeaderValue};
     use std::env;
     use std::io::{Seek, SeekFrom};
@@ -34,8 +34,8 @@ pub mod odm {
             );
         }
 
-        println!("THESE ARE NEW HEADERS: ");
-        dbg!(&headers);
+        // println!("THESE ARE NEW HEADERS: ");
+        // dbg!(&headers);
 
         http_request_builder = http_request_builder.default_headers(headers);
         let client = http_request_builder.timeout(None).build()?;
@@ -62,8 +62,8 @@ pub mod odm {
             );
         }
 
-        println!("THESE ARE NEW HEADERS: ");
-        dbg!(&headers);
+        // println!("THESE ARE NEW HEADERS: ");
+        // dbg!(&headers);
 
         http_request_builder = http_request_builder.default_headers(headers);
         let client = http_request_builder.build()?;
@@ -130,22 +130,40 @@ pub mod odm {
         file.write_all(&body_bytes[..]).unwrap();
     }
 
-    pub fn download_chunk(mut req_info: RequestInfo, start: u64, end: u64, file_path: &String) {
+    pub fn download_chunk(
+        mut req_info: RequestInfo,
+        start: u64,
+        end: u64,
+        file_path: &String,
+    ) -> Result<(), ()> {
         let mut headers = req_info.headers.clone();
-        headers.insert("range".to_string(), format!("bytes={start}-{end}"));
+        headers.insert("Range".to_string(), format!("bytes={start}-{end}"));
         req_info.headers = headers;
         let client = make_http_client(&req_info).unwrap();
-        println!("SENDING CHUNK DOWNLOAD WITH HEADERS: {:?}", &req_info.headers);
+        // println!("SENDING CHUNK DOWNLOAD WITH HEADERS: {:?}", &req_info.headers);
         let resp = client.get(&req_info.url).send().unwrap();
 
-        let resp_bytes = resp.bytes().unwrap();
+        match resp.headers().get("Content-Range") {
+            Some(cr) => {
+                println!("{:?}", &resp.headers().get("Content-Range"));
+                let resp_bytes = resp.bytes().unwrap();
 
-        //Open the file with write permissions
-        let mut file = std::fs::OpenOptions::new().write(true).open(file_path).unwrap();
-        //seek the handler to the chunk size
-        file.seek(SeekFrom::Start(start)).unwrap();
+                //Open the file with write permissions
+                let mut file = std::fs::OpenOptions::new()
+                    .write(true)
+                    .open(file_path)
+                    .unwrap();
+                //seek the handler to the chunk size
+                file.seek(SeekFrom::Start(start)).unwrap();
 
-        file.write_all(&resp_bytes).unwrap();
+                file.write_all(&resp_bytes).unwrap();
+
+                return Ok(());
+            }
+            None => {
+                return Err(());
+            }
+        }
     }
 
     pub fn get_path(url: &Url) -> String {
@@ -169,7 +187,10 @@ pub mod dmserver {
     use serde::{Deserialize, Serialize};
     use serde_json;
     use std::{
-        clone, io::{Read, Write}, net::TcpListener, thread
+        clone,
+        io::{Read, Write},
+        net::TcpListener,
+        thread,
     };
 
     #[derive(Deserialize, Serialize, Debug, Clone)]
