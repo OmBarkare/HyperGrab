@@ -12,9 +12,6 @@ pub mod odm {
     fn make_http_client(
         req_info: &RequestInfo,
     ) -> Result<reqwest::blocking::Client, anyhow::Error> {
-        // headers.insert(USER_AGENT, HeaderValue::from_static("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"));
-        // headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
-        // headers.insert(REFERER, HeaderValue::from_static("https://pixabay.com/"));
 
         let mut http_request_builder = reqwest::blocking::ClientBuilder::new();
         let mut headers = reqwest::header::HeaderMap::new();
