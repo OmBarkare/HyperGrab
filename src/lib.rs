@@ -1,18 +1,13 @@
 pub mod odm {
-    use anyhow;
+    use anyhow::{self, Error};
     use reqwest::header::{HeaderName, HeaderValue};
-    use std::env;
-    use std::io::{Seek, SeekFrom};
-    use std::str::FromStr;
-    use std::{fs::File, io::Write};
+    use std::{env, fs::File, io::Write, str::FromStr, io::{Seek, SeekFrom}, thread::{self, sleep}, time::Duration};
     use url::Url;
-
     use crate::dmserver::RequestInfo;
 
     fn make_http_client(
         req_info: &RequestInfo,
     ) -> Result<reqwest::blocking::Client, anyhow::Error> {
-
         let mut http_request_builder = reqwest::blocking::ClientBuilder::new();
         let mut headers = reqwest::header::HeaderMap::new();
 
@@ -77,12 +72,13 @@ pub mod odm {
     }
 
     #[derive(Debug)]
-    pub struct FileInfo {
+    pub struct ResponseInfo {
         pub size: u64,
         pub supports_ranges: bool,
+        pub version: reqwest::Version,
     }
 
-    pub fn get_file_info(req_info: &RequestInfo) -> Result<FileInfo, anyhow::Error> {
+    pub fn get_resp_info(req_info: &RequestInfo) -> Result<ResponseInfo, anyhow::Error> {
         let client = make_http_client(&req_info).unwrap();
         let resp = client.head(req_info.url.clone()).send()?;
 
@@ -90,16 +86,18 @@ pub mod odm {
             anyhow::bail!("Server responded with error {}", resp.status());
         } else {
             let headers = resp.headers();
+            let vers = resp.version();
             let content_len: u64 = headers
                 .get("CONTENT-LENGTH")
                 .and_then(|v| v.to_str().ok())
                 .and_then(|v| v.trim().parse().ok())
                 .unwrap_or(0);
 
+            println!("Version: {:?}", vers);
             println!("Content-length: {}", content_len);
             println!(
                 "accept-ranges: {}",
-                headers.get("ACCEPT-RANGES").unwrap().to_str().unwrap()
+                headers.get("Accept-Ranges").unwrap().to_str().unwrap()
             );
             let supports_ranges = headers.get("ACCEPT-RANGES").unwrap().to_str().unwrap();
             let supports_ranges = if supports_ranges.eq_ignore_ascii_case("bytes") {
@@ -112,10 +110,72 @@ pub mod odm {
                 anyhow::bail!("content length is zero");
             }
 
-            Ok(FileInfo {
+            Ok(ResponseInfo {
                 size: content_len,
                 supports_ranges: supports_ranges,
+                version: vers,
             })
+        }
+    }
+
+    pub fn downloadv1(req_info: &RequestInfo, resp_info: Result<ResponseInfo, Error>, filename: &String) {
+        match resp_info {
+            Ok(resp_info) => {
+                dbg!(&resp_info);
+
+                let file_path = format!(
+                    "{}/{}",
+                    dirs::download_dir().unwrap().to_str().unwrap(),
+                    filename
+                );
+
+                //preallocating the space for file.
+                File::create(&file_path)
+                    .unwrap()
+                    .set_len(resp_info.size)
+                    .unwrap();
+
+                // let mut file = File::create(format!("{}/{}", dirs::download_dir().unwrap().to_str().unwrap(), filename)).unwrap();
+                // dowload_from_url_to(&req_info, &mut file);
+                let chunks = 4;
+                let mut thread_handles = vec![];
+                for i in 0..chunks {
+                    let mut start = resp_info.size / chunks * i;
+                    let mut end = resp_info.size / chunks * (i + 1) - 1;
+                    if i == chunks - 1 {
+                        start = resp_info.size / chunks * i;
+                        end = resp_info.size - 1;
+                    }
+                    let req_info_clone = req_info.clone();
+                    let file_path_clone = file_path.clone();
+
+                    let handle = thread::spawn(move || {
+                        println!("Thread {i}: {} - {}", start, end);
+                        let req_info_clone2 = req_info_clone.clone();
+                        match download_chunk(req_info_clone, start, end, &file_path_clone) {
+                            Ok(_) => {
+                                println!("success for thread {i}");
+                            }
+                            Err(_) => {
+                                sleep(Duration::from_secs(6));
+                                println!("retrying for thread {i}");
+                                download_chunk(req_info_clone2, start, end, &file_path_clone)
+                                    .unwrap();
+                            }
+                        }
+                    });
+
+                    thread_handles.push(handle);
+                }
+                for handle in thread_handles {
+                    handle.join().unwrap();
+                }
+                println!("Download complete!");
+            }
+
+            Err(e) => {
+                println!("Error occured: {}", e);
+            }
         }
     }
 

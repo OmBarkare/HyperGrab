@@ -1,6 +1,6 @@
 //Next Steps: Make request handlesr server on another thread, so that it is active and does not close after a single request is sent.
 
-use project1::odm::download_chunk;
+use project1::odm::{download_chunk, downloadv1};
 use project1::{dmserver, dmserver::RequestInfo, odm, odm::dowload_from_url_to};
 use std::net::TcpListener;
 use std::thread::{self, sleep};
@@ -30,60 +30,35 @@ fn main() {
     println!("Got download link: {:?}", &req_info);
     // let url = Url::from_str(&url).unwrap();
 
-    match odm::get_file_info(&req_info) {
-        Ok(file_info) => {
-            dbg!(&file_info);
+    let resp_info = odm::get_resp_info(&req_info);
 
-            let file_path = format!(
-                "{}/{}",
-                dirs::download_dir().unwrap().to_str().unwrap(),
-                filename
-            );
-            
-            //preallocating the space for file.
-            File::create(&file_path).unwrap().set_len(file_info.size).unwrap();
+    downloadv1(&req_info, resp_info, filename);
 
-            // let mut file = File::create(format!("{}/{}", dirs::download_dir().unwrap().to_str().unwrap(), filename)).unwrap();
-            // dowload_from_url_to(&req_info, &mut file);
-            let chunks = 4;
-            let mut thread_handles = vec![];
-            for i in 0..chunks {
-                let mut start = file_info.size / chunks * i;
-                let mut end = file_info.size / chunks * (i + 1) - 1;
-                if i == chunks - 1 {
-                    start = file_info.size / chunks * i;
-                    end = file_info.size -1;
-                }
-                let req_info_clone = req_info.clone();
-                let file_path_clone = file_path.clone();
+    // let version = file_info.unwrap().version;
+    // match version {
+    //     http::Version::HTTP_09 => {
+    //         println!("Http Version 0.9");
+    //     }
 
-                let handle = thread::spawn(move || {
-                    println!("Thread {i}: {} - {}", start, end);
-                    let req_info_clone2 = req_info_clone.clone();
-                    match download_chunk(req_info_clone, start, end, &file_path_clone) {
-                        Ok(_) => {
-                            println!("success for thread {i}");
-                        }
-                        Err(_) => {
-                            sleep(Duration::from_secs(6));
-                            println!("retrying for thread {i}");
-                            download_chunk(req_info_clone2, start, end, &file_path_clone).unwrap();
-                        }
-                    }
-                });
+    //     http::Version::HTTP_10 => {
+    //         println!("Http Version 1.0");
+    //     }
 
-                thread_handles.push(handle);
-            }
-            for handle in thread_handles {
-                handle.join().unwrap();
-            }
-            println!("Download complete!");
-        }
+    //     http::Version::HTTP_11 => {
+    //         println!("Http Version 1.1");
+    //     }
 
+    //     http::Version::HTTP_2 => {
+    //         println!("Http Version 2");
+    //     }
 
+    //     http::Version::HTTP_3 => {
+    //         println!("Http Version 3");
+    //     }
 
-        Err(e) => {
-            println!("Error occured: {}", e);
-        }
-    }
+    //     _ => {
+    //         panic!("Unknown http version");
+    //     }
+    // }
+
 }
