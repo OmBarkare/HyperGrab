@@ -63,7 +63,7 @@ pub mod odm {
         Ok(client)
     }
 
-    fn get_filename(url: &Url) -> Result<String, anyhow::Error> {
+    fn get_filename_from_url(url: &Url) -> Result<String, anyhow::Error> {
         if let Some(filename) = url.path_segments().and_then(|s| s.last()) {
             return Ok(filename.to_string());
         } else {
@@ -179,15 +179,7 @@ pub mod odm {
         }
     }
 
-    pub fn dowload_from_url_to(req_info: &RequestInfo, file: &mut File) {
-        let client = make_http_client(req_info).unwrap();
-        let resp = client.get(req_info.url.clone()).send().unwrap();
-        let body_bytes = resp.bytes().unwrap();
-
-        file.write_all(&body_bytes[..]).unwrap();
-    }
-
-    pub fn download_chunk(
+    fn download_chunk(
         mut req_info: RequestInfo,
         start: u64,
         end: u64,
@@ -221,21 +213,6 @@ pub mod odm {
                 return Err(());
             }
         }
-    }
-
-    pub fn get_path(url: &Url) -> String {
-        let filename = get_filename(url).unwrap();
-        let pathname;
-        if let Some(p) = dirs::download_dir() {
-            pathname = format!("{}/{}", p.to_str().unwrap(), filename);
-        } else {
-            pathname = format!(
-                "{}/{}",
-                env::current_dir().unwrap().to_str().unwrap(),
-                filename
-            );
-        }
-        pathname
     }
 }
 
