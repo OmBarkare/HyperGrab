@@ -2,16 +2,16 @@
 
 use project1::odm::{downloadv1};
 use project1::{dmserver, dmserver::RequestInfo, odm};
-use std::net::TcpListener;
 use std::env;
+use tokio::net::{TcpListener, TcpStream};
 
 fn main() {
     let args: Vec<String> = env::args().collect();     
     let filename = &args[1];
-    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+    let listener_blocking = std::net::TcpListener::bind("127.0.0.1:7878").unwrap();
     let req_info: dmserver::RequestInfo;
 
-    match dmserver::start_listening(listener) {
+    match dmserver::start_listening(listener_blocking) {
         Ok(r) => req_info = r,
         Err(e) => {
             req_info = RequestInfo {
