@@ -1,7 +1,7 @@
 //Next Steps: Make request handlesr server on another thread, so that it is active and does not close after a single request is sent.
 
-use project1::odm::{downloadv1};
-use project1::{dmserver, dmserver::RequestInfo, odm};
+use downloader_mt::odm::{downloadv1};
+use downloader_mt::{dmserver, dmserver::RequestInfo, odm};
 use std::env;
 use tokio::net::{TcpListener, TcpStream};
 
