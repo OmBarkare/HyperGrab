@@ -1,0 +1,19 @@
+{
+    "name": "Check Downloads",
+    "description": "DISCO",
+    "version": "1",
+    "manifest_version": 3,
+    "permissions": [ "downloads", "webRequest" ],
+    "host_permissions": ["*://*/*"],
+    "action": {
+        "default_popup": "hello.html"
+    },
+    "background": {
+        "scripts": ["background.js"]
+    },
+    "browser_specific_settings": {
+        "gecko": {
+            "id": "hypergrab@OmBarkare.com"
+        }
+    }
+}

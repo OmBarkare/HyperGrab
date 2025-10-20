@@ -3,7 +3,6 @@
 use downloader_mt::odm::{downloadv1};
 use downloader_mt::{dmserver, dmserver::RequestInfo, odm};
 use std::env;
-use tokio::net::{TcpListener, TcpStream};
 
 fn main() {
     let args: Vec<String> = env::args().collect();     

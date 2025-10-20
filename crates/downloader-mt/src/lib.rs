@@ -1,7 +1,7 @@
 pub mod odm {
     use anyhow::{self, Error};
     use reqwest::header::{HeaderName, HeaderValue};
-    use std::{env, fs::File, io::Write, str::FromStr, io::{Seek, SeekFrom}, thread::{self, sleep}, time::Duration};
+    use std::{fs::File, io::Write, str::FromStr, io::{Seek, SeekFrom}, thread::{self, sleep}, time::Duration};
     use url::Url;
     use crate::dmserver::RequestInfo;
 
