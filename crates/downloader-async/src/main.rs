@@ -1,4 +1,7 @@
+use std::fs::{File, OpenOptions};
+
 use tokio::sync::mpsc;
+use crate::downloader::{make_default_client, get_file_info};
 
 mod server_task;
 mod downloader;

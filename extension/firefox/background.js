@@ -2,7 +2,7 @@ console.log("Extension Is Running");
 let allHeaders = {};
 
 
-chrome.downloads.onCreated.addListener((downloadItem) => {
+browser.downloads.onCreated.addListener((downloadItem) => {
     console.log("making post request");
     let header = allHeaders[downloadItem.url];
     fetch("http://127.0.0.1:7878", {
@@ -16,7 +16,7 @@ chrome.downloads.onCreated.addListener((downloadItem) => {
         })
     });
     setTimeout(() => {
-        chrome.downloads.cancel(downloadItem.id);
+        browser.downloads.cancel(downloadItem.id);
     }, 100);
     console.log("url", downloadItem.url);
     console.log("headers: ", JSON.stringify(header, null, 2));

@@ -5,8 +5,9 @@ edition = "2024"
 
 [dependencies]
 tokio = { version = "1.48" , features = ["full"] }
-reqwest = { version = "0.12", features = ["json", "rustls-tls", "http2"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "http2", "stream"] }
 futures = "0.3"
 anyhow = "1.0"
 axum = "0.8.6"
 serde = { version = "1.0.228", features = ["derive"] }
+dirs = "6.0.0"
