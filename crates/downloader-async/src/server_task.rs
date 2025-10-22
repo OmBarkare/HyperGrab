@@ -27,10 +27,10 @@ pub async fn start_listening(addr: &str, tx: mpsc::Sender<DownloadRequest>) -> R
 
 async fn handler(
     State(state): State<Arc<AppState>>,
-    Json(downloadRequest): Json<DownloadRequest>
+    Json(download_request): Json<DownloadRequest>
 ) -> StatusCode {
     
-    println!("recieved url: {} \n headers: {:?}", downloadRequest.url, downloadRequest.headers);
-    state.tx.send(downloadRequest).await.unwrap();
+    println!("recieved url: {} \n headers: {:?}", download_request.url, download_request.headers);
+    state.tx.send(download_request).await.unwrap();
     StatusCode::OK
 }

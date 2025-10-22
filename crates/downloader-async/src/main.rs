@@ -1,5 +1,5 @@
 use tokio::sync::mpsc;
-use crate::{downloader::{get_file_info, make_default_client, spawn_download_tasks}, server_task::DownloadRequest};
+use crate::{downloader::{get_file_info, make_default_client, spawn_download_tasks}};
 use dirs;
 
 mod server_task;
@@ -8,7 +8,7 @@ mod downloader;
 #[tokio::main]
 async fn main() {
     println!("Hello async world !");
-    const CHUNKS: u64 = 6;
+    const CHUNKS: u64 = 4;
 
     let (tx, mut rx) = mpsc::channel(16);
     let server_handle = tokio::spawn(async move {

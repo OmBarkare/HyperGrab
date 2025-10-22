@@ -1,10 +1,8 @@
-use std::{collections::HashMap, fmt::format, str::FromStr};
+use std::{collections::HashMap, str::FromStr};
 
 use futures::{future::join_all, StreamExt};
-use reqwest::{ self, header::{ self, HeaderMap, HeaderName, HeaderValue }, Client, ClientBuilder, Response };
+use reqwest::{ self, header::{HeaderMap, HeaderName, HeaderValue }, Client, ClientBuilder };
 use tokio::{fs::{File, OpenOptions}, io::{AsyncSeekExt, AsyncWriteExt}};
-
-use crate::server_task::DownloadRequest;
 
 pub struct FileInfo {
     pub content_length: u64,
@@ -49,17 +47,20 @@ pub async fn spawn_download_tasks(client: Client, url: &str, file_info: FileInfo
 
             let mut file = OpenOptions::new().write(true).open(file_path).await.unwrap();
             file.seek(std::io::SeekFrom::Start(start)).await.unwrap();
-
+            // let part_path = format!("{file_path}.part-{i}");
+            file.set_len(end - start + 1).await.unwrap();
             let range = format!("bytes={}-{}", start, end);
             println!("range-{}=>{}-{}", i, start, end);
             let resp = client.get(url).header("Range", range).send().await.unwrap();
             let mut bytes_stream = resp.bytes_stream();
 
+            let mut downloaded_bytes: u64 = 0;
             while let Some(bytes) = bytes_stream.next().await {
                 let bytes = bytes.unwrap();
-
+                downloaded_bytes += bytes.len() as u64;
                 file.write_all(&bytes).await.unwrap();
             }
+            println!("downloaded {downloaded_bytes} for task no {i}");
         });
         println!("Done pawning task no {}", i);
         handles.push(handle);
