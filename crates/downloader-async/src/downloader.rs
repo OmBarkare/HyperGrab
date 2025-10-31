@@ -26,8 +26,8 @@ pub async fn get_file_info(client: Client, url: &str) -> Result<FileInfo, anyhow
     };
 
     let file_name = resp.headers().get("content-disposition").unwrap()
-                                        .to_str()
-                                        .unwrap().split("filename=").nth(1).unwrap()
+                                        .to_str().unwrap()
+                                        .split("filename=").nth(1).unwrap()
                                         .trim_matches('"').trim_matches(';').to_string();
 
     Ok(FileInfo { content_length, accept_ranges, file_name })
