@@ -55,6 +55,42 @@ Possible future directions for this project include:
 Pre-built binaries are not available at this time.
 You must build the project from source.
 
+## How to Use
+
+This project works by combining a **local Chrome extension** with the
+**downloader service**. The Chrome extension intercepts browser
+downloads and forwards the download metadata to a local server running on
+`localhost`.
+
+### Usage Flow
+
+1. Load the Chrome extension
+2. Start the Rust downloader service
+3. Trigger a download in Chrome
+
+---
+
+### Step 1: Load the Chrome Extension
+
+1. Open Google Chrome
+2. Navigate to `chrome://extensions`
+3. Enable **Developer mode**
+4. Click **Load unpacked**
+5. Select the `extension/chrome` directory from this repository
+
+This extension intercepts browser download events and sends the download
+information to a local server.
+
+---
+
+### Step 2: Start the Downloader Service
+
+From the top-level project directory, run:
+
+```bash
+cargo run -p downloader-async
+```
+
 ### Requirements
 - Rust toolchain
 - OpenSSL
@@ -62,3 +98,4 @@ You must build the project from source.
 Install OpenSSL on Debian-based systems:
 ```bash
 sudo apt install libssl-dev
+```
