@@ -1,23 +1,64 @@
 # HyperGrab
-This is a download manager tool, which is still in developement.
+
+HyperGrab is an **experimental HTTP downloader** written in Rust to explore
+concurrency models and file I/O.
+
+---
+
+## Project Status: Experimental
+
+This is a **learning project** and not a production-grade download manager.
+The focus is experimentation and understanding real-world complexity, not
+feature completeness or reliability.
+
+---
+
+## Motivation
+
+This project was built to gain hands-on experience with:
+- Rust systems programming
+- file I/O and buffering
+- concurrency and async execution
+- HTTP downloading and its edge cases
+
+What initially seemed like a simple problem quickly revealed significant
+complexity, especially around error handling and coordinating multiple
+concurrent download tasks. Understanding these challenges was a primary goal
+of the project.
+
+---
+
+## What It Currently Does
+
+- Downloads files over HTTP
+- Supports segmented downloads
+- Includes an async-based implementation
+- Integrates with a Chrome extension to intercept downloads
+
+---
+
+## Future Work
+
+Possible future directions for this project include:
+
+- Exploring a worker-pool-based design instead of spawning a fixed set of async tasks
+- Improving error handling and retry logic
+- Detecting unsupported HTTP range requests
+- Adding basic progress reporting
+- Exploring resumable downloads
+- Simplifying the overall project structure
+
+---
 
 ## Installation
-As of now, binaries are not available to download directly. You will have
-to clone the repository and build from source.
-This project requires openSSL, install it using
+
+Pre-built binaries are not available at this time.
+You must build the project from source.
+
+### Requirements
+- Rust toolchain
+- OpenSSL
+
+Install OpenSSL on Debian-based systems:
 ```bash
 sudo apt install libssl-dev
-```
-after cloning this project, run this in the top level project directory
-```bash
-cargo run -p downloader-async
-``` 
-Then, your project should build and run.
-
-## Usage
-1. Go to chrome (this works only with chrome as of now)
-2. go to manage extensions and turn on developer options
-3. click 'load unpacked' and add the chrome extension under the extension directory this project
-
-now, whenever you click download on chrome, it will cancel that download and download with the
-download manager
