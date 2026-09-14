@@ -53,6 +53,17 @@ pub fn make_default_client(header_hashmap: &HashMap<String, String>) -> Client {
     let mut head_map = HeaderMap::new();
     let client_builder = ClientBuilder::new();
     for (key, val) in header_hashmap {
+        if key.starts_with(':')
+            || key.eq_ignore_ascii_case("host")
+            || key.eq_ignore_ascii_case("content-length")
+            || key.eq_ignore_ascii_case("transfer-encoding")
+            || key.eq_ignore_ascii_case("connection")
+            || key.eq_ignore_ascii_case("upgrade")
+            || key.eq_ignore_ascii_case("range")
+        {
+            continue;
+        }
+
         let name = HeaderName::from_str(&key).unwrap();
         let value = HeaderValue::from_str(&val).unwrap();
 
