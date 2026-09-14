@@ -113,7 +113,6 @@ pub async fn spawn_download_tasks(
                 .await
                 .unwrap();
             file.seek(std::io::SeekFrom::Start(start)).await.unwrap();
-            file.set_len(end - start + 1).await.unwrap();
             let range = format!("bytes={}-{}", start, end);
             println!("range-{}=>{}-{}", i, start, end);
             let resp = client.get(url).header("Range", range).send().await.unwrap();
