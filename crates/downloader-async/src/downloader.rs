@@ -1,4 +1,8 @@
-use std::{collections::HashMap, str::FromStr};
+use std::{
+    collections::{HashMap, VecDeque},
+    str::FromStr,
+    sync::{Arc, Mutex},
+};
 
 use futures::{StreamExt, future::join_all};
 use reqwest::{
@@ -9,6 +13,14 @@ use tokio::{
     fs::{File, OpenOptions},
     io::{AsyncSeekExt, AsyncWriteExt},
 };
+
+#[derive(Debug, Clone)]
+pub struct Chunk {
+    pub id: usize,
+    pub start: u64,
+    pub end: u64,
+    pub retries: u32,
+}
 
 /// A struct to store info we get from a head request
 /// currently, it is assumed that the server accepts ranges so there is no
@@ -84,67 +96,155 @@ pub fn make_default_client(header_hashmap: &HashMap<String, String>) -> Client {
     client_builder.default_headers(head_map).build().unwrap()
 }
 
-/// this is the main function that does downloading
-/// Currently it does everyhting, calcualates ranges for chunks, spawns tasks
-/// for each chunk, downloads chunks, and writes them to the file.
-/// This needs seperation of concerns maybe ?
+pub fn create_chunks(content_length: u64, chunk_size: u64) -> VecDeque<Chunk> {
+    let mut queue = VecDeque::new();
+    let mut start = 0;
+    let mut id = 0;
+
+    while start < content_length {
+        let end = (start + chunk_size - 1).min(content_length - 1);
+        queue.push_back(Chunk {
+            id,
+            start,
+            end,
+            retries: 0,
+        });
+        start = end + 1;
+        id += 1;
+    }
+
+    queue
+}
+
+pub async fn download_worker(
+    worker_id: usize,
+    client: Client,
+    url: String,
+    file_path: String,
+    queue: Arc<Mutex<VecDeque<Chunk>>>,
+) {
+    loop {
+        let chunk = {
+            let mut lock = queue.lock().unwrap();
+            lock.pop_front()
+        };
+
+        let chunk = match chunk {
+            Some(c) => c,
+            None => {
+                println!("Worker {worker_id} finished: queue empty.");
+                break;
+            }
+        };
+
+        println!(
+            "Worker {worker_id} started chunk {}: bytes {}-{}",
+            chunk.id, chunk.start, chunk.end
+        );
+
+        let range = format!("bytes={}-{}", chunk.start, chunk.end);
+        let resp = match client.get(&url).header("Range", range).send().await {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("Worker {worker_id} network error on chunk {}: {e}", chunk.id);
+                continue;
+            }
+        };
+
+        let status = resp.status();
+        if status != reqwest::StatusCode::PARTIAL_CONTENT {
+            eprintln!(
+                "Worker {worker_id} received HTTP {status} on chunk {}",
+                chunk.id
+            );
+            continue;
+        }
+
+        let mut file = match OpenOptions::new().write(true).open(&file_path).await {
+            Ok(f) => f,
+            Err(e) => {
+                eprintln!("Worker {worker_id} file open error: {e}");
+                continue;
+            }
+        };
+
+        if let Err(e) = file.seek(std::io::SeekFrom::Start(chunk.start)).await {
+            eprintln!("Worker {worker_id} file seek error: {e}");
+            continue;
+        }
+
+        let mut bytes_stream = resp.bytes_stream();
+        let mut downloaded_bytes: u64 = 0;
+        let mut write_err = false;
+
+        while let Some(item) = bytes_stream.next().await {
+            match item {
+                Ok(bytes) => {
+                    downloaded_bytes += bytes.len() as u64;
+                    if let Err(e) = file.write_all(&bytes).await {
+                        eprintln!("Worker {worker_id} file write error: {e}");
+                        write_err = true;
+                        break;
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Worker {worker_id} stream error: {e}");
+                    write_err = true;
+                    break;
+                }
+            }
+        }
+
+        if !write_err {
+            println!(
+                "Worker {worker_id} completed chunk {} ({downloaded_bytes} bytes)",
+                chunk.id
+            );
+        }
+    }
+}
+
 pub async fn spawn_download_tasks(
     client: Client,
     url: &str,
     file_info: FileInfo,
     file_path: &str,
-    chunks: u64,
+    num_workers: usize,
 ) {
-    // creating file and setting length to content_length
     let file = File::create(file_path).await.unwrap();
     file.set_len(file_info.content_length).await.unwrap();
     drop(file);
+
+    const CHUNK_SIZE: u64 = 4 * 1024 * 1024; // 4MB chunks
+    let chunks = create_chunks(file_info.content_length, CHUNK_SIZE);
+    let total_chunks = chunks.len();
+    println!(
+        "Total chunks to download: {} (using {} workers)",
+        total_chunks, num_workers
+    );
+
+    let queue = Arc::new(Mutex::new(chunks));
     let mut handles = Vec::new();
-    for i in 0..chunks {
-        // cloning all required fields to be used in a task
+
+    for worker_id in 0..num_workers {
         let client = client.clone();
         let url = url.to_string();
         let file_path = file_path.to_string();
-        let content_length = file_info.content_length;
+        let queue = queue.clone();
 
-        println!("Spawning task no {}", i);
-        let handle = tokio::spawn(async move {
-            // calculating chunk range
-            let start = i * content_length / chunks;
-            let end = if i < (chunks - 1) {
-                (i + 1) * content_length / chunks - 1
-            } else {
-                content_length - 1
-            };
-
-            // opening file and seeking to starting byte of that range
-            let mut file = OpenOptions::new()
-                .write(true)
-                .open(file_path)
-                .await
-                .unwrap();
-            file.seek(std::io::SeekFrom::Start(start)).await.unwrap();
-            let range = format!("bytes={}-{}", start, end);
-            println!("range-{}=>{}-{}", i, start, end);
-            let resp = client.get(url).header("Range", range).send().await.unwrap();
-            let mut bytes_stream = resp.bytes_stream();
-            // keeping track of downloaded bytes for progress bar(#TODO) and to check if that chunk
-            // was downloaded fully
-            let mut downloaded_bytes: u64 = 0;
-            while let Some(bytes) = bytes_stream.next().await {
-                let bytes = bytes.unwrap();
-                downloaded_bytes += bytes.len() as u64;
-                file.write_all(&bytes).await.unwrap();
-            }
-            println!("downloaded {downloaded_bytes} for task no {i}");
-        });
-        println!("Done pawning task no {}", i);
+        let handle = tokio::spawn(download_worker(
+            worker_id,
+            client,
+            url,
+            file_path,
+            queue,
+        ));
         handles.push(handle);
     }
 
     println!("Joining all Handles...");
     join_all(handles).await;
-    println!("Done Downloading");
+    println!("Done Downloading: all workers finished.");
 }
 
 fn resolve_filename(headers: &HeaderMap) -> String {
