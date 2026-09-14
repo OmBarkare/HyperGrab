@@ -2,7 +2,13 @@ use std::{
     collections::{HashMap, VecDeque},
     str::FromStr,
     sync::{Arc, Mutex},
+    time::{Duration, Instant},
 };
+
+const MIN_REQUEST_INTERVAL: Duration = Duration::from_millis(250);
+const BASE_BACKOFF: Duration = Duration::from_secs(1);
+const MAX_BACKOFF: Duration = Duration::from_secs(16);
+const MAX_RETRIES: u32 = 5;
 
 use futures::{StreamExt, future::join_all};
 use reqwest::{
@@ -116,12 +122,58 @@ pub fn create_chunks(content_length: u64, chunk_size: u64) -> VecDeque<Chunk> {
     queue
 }
 
+fn calculate_backoff(retries: u32, headers: Option<&HeaderMap>) -> Duration {
+    if let Some(h) = headers {
+        if let Some(retry_after) = h.get("retry-after").and_then(|v| v.to_str().ok()) {
+            if let Ok(seconds) = retry_after.trim().parse::<u64>() {
+                return Duration::from_secs(seconds).min(MAX_BACKOFF);
+            }
+        }
+    }
+
+    let multiplier = 2u64.saturating_pow(retries);
+    let delay_millis = BASE_BACKOFF.as_millis().saturating_mul(multiplier as u128);
+    Duration::from_millis(delay_millis as u64).min(MAX_BACKOFF)
+}
+
+fn handle_chunk_failure(
+    mut chunk: Chunk,
+    reason: &str,
+    worker_id: usize,
+    headers: Option<&HeaderMap>,
+    queue: &Arc<Mutex<VecDeque<Chunk>>>,
+    next_request_time: &Arc<Mutex<Instant>>,
+) {
+    if chunk.retries < MAX_RETRIES {
+        let backoff = calculate_backoff(chunk.retries, headers);
+        eprintln!(
+            "Worker {worker_id} {reason} on chunk {}. Backing off for {:?} (retry {}/{})",
+            chunk.id, backoff, chunk.retries + 1, MAX_RETRIES
+        );
+
+        {
+            let mut next = next_request_time.lock().unwrap();
+            let resume_at = Instant::now() + backoff;
+            *next = (*next).max(resume_at);
+        }
+
+        chunk.retries += 1;
+        queue.lock().unwrap().push_back(chunk);
+    } else {
+        eprintln!(
+            "Worker {worker_id} chunk {} failed permanently after {MAX_RETRIES} retries ({reason})",
+            chunk.id
+        );
+    }
+}
+
 pub async fn download_worker(
     worker_id: usize,
     client: Client,
     url: String,
     file_path: String,
     queue: Arc<Mutex<VecDeque<Chunk>>>,
+    next_request_time: Arc<Mutex<Instant>>,
 ) {
     loop {
         let chunk = {
@@ -142,20 +194,44 @@ pub async fn download_worker(
             chunk.id, chunk.start, chunk.end
         );
 
+        // Enforce minimum request spacing across all workers
+        let delay = {
+            let mut next = next_request_time.lock().unwrap();
+            let now = Instant::now();
+            let scheduled = (*next).max(now);
+            *next = scheduled + MIN_REQUEST_INTERVAL;
+            scheduled.saturating_duration_since(now)
+        };
+
+        if delay > Duration::ZERO {
+            tokio::time::sleep(delay).await;
+        }
+
         let range = format!("bytes={}-{}", chunk.start, chunk.end);
         let resp = match client.get(&url).header("Range", range).send().await {
             Ok(r) => r,
             Err(e) => {
-                eprintln!("Worker {worker_id} network error on chunk {}: {e}", chunk.id);
+                handle_chunk_failure(
+                    chunk,
+                    &format!("network error: {e}"),
+                    worker_id,
+                    None,
+                    &queue,
+                    &next_request_time,
+                );
                 continue;
             }
         };
 
         let status = resp.status();
         if status != reqwest::StatusCode::PARTIAL_CONTENT {
-            eprintln!(
-                "Worker {worker_id} received HTTP {status} on chunk {}",
-                chunk.id
+            handle_chunk_failure(
+                chunk,
+                &format!("received HTTP {status}"),
+                worker_id,
+                Some(resp.headers()),
+                &queue,
+                &next_request_time,
             );
             continue;
         }
@@ -163,13 +239,27 @@ pub async fn download_worker(
         let mut file = match OpenOptions::new().write(true).open(&file_path).await {
             Ok(f) => f,
             Err(e) => {
-                eprintln!("Worker {worker_id} file open error: {e}");
+                handle_chunk_failure(
+                    chunk,
+                    &format!("file open error: {e}"),
+                    worker_id,
+                    None,
+                    &queue,
+                    &next_request_time,
+                );
                 continue;
             }
         };
 
         if let Err(e) = file.seek(std::io::SeekFrom::Start(chunk.start)).await {
-            eprintln!("Worker {worker_id} file seek error: {e}");
+            handle_chunk_failure(
+                chunk,
+                &format!("file seek error: {e}"),
+                worker_id,
+                None,
+                &queue,
+                &next_request_time,
+            );
             continue;
         }
 
@@ -195,7 +285,16 @@ pub async fn download_worker(
             }
         }
 
-        if !write_err {
+        if write_err {
+            handle_chunk_failure(
+                chunk,
+                "stream write error",
+                worker_id,
+                None,
+                &queue,
+                &next_request_time,
+            );
+        } else {
             println!(
                 "Worker {worker_id} completed chunk {} ({downloaded_bytes} bytes)",
                 chunk.id
@@ -211,6 +310,8 @@ pub async fn spawn_download_tasks(
     file_path: &str,
     num_workers: usize,
 ) {
+    let start_time = Instant::now();
+
     let file = File::create(file_path).await.unwrap();
     file.set_len(file_info.content_length).await.unwrap();
     drop(file);
@@ -224,6 +325,7 @@ pub async fn spawn_download_tasks(
     );
 
     let queue = Arc::new(Mutex::new(chunks));
+    let next_request_time = Arc::new(Mutex::new(Instant::now()));
     let mut handles = Vec::new();
 
     for worker_id in 0..num_workers {
@@ -231,6 +333,7 @@ pub async fn spawn_download_tasks(
         let url = url.to_string();
         let file_path = file_path.to_string();
         let queue = queue.clone();
+        let next_request_time = next_request_time.clone();
 
         let handle = tokio::spawn(download_worker(
             worker_id,
@@ -238,13 +341,18 @@ pub async fn spawn_download_tasks(
             url,
             file_path,
             queue,
+            next_request_time,
         ));
         handles.push(handle);
     }
 
     println!("Joining all Handles...");
     join_all(handles).await;
-    println!("Done Downloading: all workers finished.");
+    let elapsed = start_time.elapsed();
+    println!(
+        "Download finished in {:.2} seconds",
+        elapsed.as_secs_f64()
+    );
 }
 
 fn resolve_filename(headers: &HeaderMap) -> String {
