@@ -1,12 +1,18 @@
 use std::{collections::HashMap, str::FromStr};
 
-use futures::{future::join_all, StreamExt};
-use reqwest::{ self, header::{HeaderMap, HeaderName, HeaderValue }, Client, ClientBuilder };
-use tokio::{fs::{File, OpenOptions}, io::{AsyncSeekExt, AsyncWriteExt}};
+use futures::{StreamExt, future::join_all};
+use reqwest::{
+    self, Client, ClientBuilder,
+    header::{HeaderMap, HeaderName, HeaderValue},
+};
+use tokio::{
+    fs::{File, OpenOptions},
+    io::{AsyncSeekExt, AsyncWriteExt},
+};
 
 /// A struct to store info we get from a head request
 /// currently, it is assumed that the server accepts ranges so there is no
-/// fallback if the server doesnt, so the accept_ranges field isnt used
+/// fallback if the server doesnt, so the accept_ranges field isnt used yet
 pub struct FileInfo {
     pub content_length: u64,
     pub accept_ranges: bool,
@@ -17,20 +23,39 @@ pub struct FileInfo {
 pub async fn get_file_info(client: Client, url: &str) -> Result<FileInfo, anyhow::Error> {
     let resp = client.head(url).send().await.unwrap();
     println!("{:?}", resp);
-    let content_length: u64 = resp.headers().get("content-length").unwrap().to_str().unwrap().parse().unwrap();
-    println!("CONTENT_LENGTH (inside get_file_info): {}",content_length);
+    let content_length: u64 = resp
+        .headers()
+        .get("content-length")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    println!("CONTENT_LENGTH (inside get_file_info): {}", content_length);
 
     let accept_ranges = match resp.headers().get("accept-ranges") {
         Some(val) => val.to_str().unwrap_or("").eq_ignore_ascii_case("bytes"),
         _ => false,
     };
 
-    let file_name = resp.headers().get("content-disposition").unwrap()
-                                        .to_str().unwrap()
-                                        .split("filename=").nth(1).unwrap()
-                                        .trim_matches('"').trim_matches(';').to_string();
+    let file_name = resp
+        .headers()
+        .get("content-disposition")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .split("filename=")
+        .nth(1)
+        .unwrap()
+        .trim_matches('"')
+        .trim_matches(';')
+        .to_string();
 
-    Ok(FileInfo { content_length, accept_ranges, file_name })
+    Ok(FileInfo {
+        content_length,
+        accept_ranges,
+        file_name,
+    })
 }
 
 /// makes and returns a client with headers that you pass as a
@@ -52,8 +77,14 @@ pub fn make_default_client(header_hashmap: &HashMap<String, String>) -> Client {
 /// Currently it does everyhting, calcualates ranges for chunks, spawns tasks
 /// for each chunk, downloads chunks, and writes them to the file.
 /// This needs seperation of concerns maybe ?
-pub async fn spawn_download_tasks(client: Client, url: &str, file_info: FileInfo, file_path: &str, chunks: u64) {
-    // creating file and setting length to content_length 
+pub async fn spawn_download_tasks(
+    client: Client,
+    url: &str,
+    file_info: FileInfo,
+    file_path: &str,
+    chunks: u64,
+) {
+    // creating file and setting length to content_length
     let file = File::create(file_path).await.unwrap();
     file.set_len(file_info.content_length).await.unwrap();
     drop(file);
@@ -69,15 +100,18 @@ pub async fn spawn_download_tasks(client: Client, url: &str, file_info: FileInfo
         let handle = tokio::spawn(async move {
             // calculating chunk range
             let start = i * content_length / chunks;
-            let end = 
-            if i < (chunks - 1) {
+            let end = if i < (chunks - 1) {
                 (i + 1) * content_length / chunks - 1
             } else {
                 content_length - 1
             };
 
             // opening file and seeking to starting byte of that range
-            let mut file = OpenOptions::new().write(true).open(file_path).await.unwrap();
+            let mut file = OpenOptions::new()
+                .write(true)
+                .open(file_path)
+                .await
+                .unwrap();
             file.seek(std::io::SeekFrom::Start(start)).await.unwrap();
             file.set_len(end - start + 1).await.unwrap();
             let range = format!("bytes={}-{}", start, end);

@@ -1,11 +1,11 @@
 //Next Steps: Make request handlesr server on another thread, so that it is active and does not close after a single request is sent.
 
-use downloader_mt::odm::{downloadv1};
+use downloader_mt::odm::downloadv1;
 use downloader_mt::{dmserver, dmserver::RequestInfo, odm};
 use std::env;
 
 fn main() {
-    let args: Vec<String> = env::args().collect();     
+    let args: Vec<String> = env::args().collect();
     let filename = &args[1];
     let listener_blocking = std::net::TcpListener::bind("127.0.0.1:7878").unwrap();
     let req_info: dmserver::RequestInfo;

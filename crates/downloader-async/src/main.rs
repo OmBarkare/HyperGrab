@@ -1,9 +1,9 @@
-use tokio::sync::mpsc;
-use crate::{downloader::{get_file_info, make_default_client, spawn_download_tasks}};
+use crate::downloader::{get_file_info, make_default_client, spawn_download_tasks};
 use dirs;
+use tokio::sync::mpsc;
 
-mod server_task;
 mod downloader;
+mod server_task;
 
 #[tokio::main]
 async fn main() {
@@ -12,14 +12,16 @@ async fn main() {
 
     let (tx, mut rx) = mpsc::channel(16);
     let server_handle = tokio::spawn(async move {
-        server_task::start_listening("127.0.0.1:7878", tx).await.unwrap();
+        server_task::start_listening("127.0.0.1:7878", tx)
+            .await
+            .unwrap();
     });
     let downloades_dir = dirs::download_dir().unwrap();
     let downloades_dir = downloades_dir.to_str().unwrap();
     while let Some(res) = rx.recv().await {
         let def_client = make_default_client(&res.headers);
         let file_info = get_file_info(def_client.clone(), &res.url).await.unwrap();
-        println!("CONTENT_LENGTH (in main): {}",file_info.content_length);
+        println!("CONTENT_LENGTH (in main): {}", file_info.content_length);
         let file_path = format!("{}/{}", downloades_dir, file_info.file_name);
 
         spawn_download_tasks(def_client.clone(), &res.url, file_info, &file_path, CHUNKS).await;

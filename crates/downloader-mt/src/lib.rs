@@ -1,9 +1,16 @@
 pub mod odm {
+    use crate::dmserver::RequestInfo;
     use anyhow::{self, Error};
     use reqwest::header::{HeaderName, HeaderValue};
-    use std::{fs::File, io::Write, str::FromStr, io::{Seek, SeekFrom}, thread::{self, sleep}, time::Duration};
+    use std::{
+        fs::File,
+        io::Write,
+        io::{Seek, SeekFrom},
+        str::FromStr,
+        thread::{self, sleep},
+        time::Duration,
+    };
     use url::Url;
-    use crate::dmserver::RequestInfo;
 
     fn make_http_client(
         req_info: &RequestInfo,
@@ -118,7 +125,11 @@ pub mod odm {
         }
     }
 
-    pub fn downloadv1(req_info: &RequestInfo, resp_info: Result<ResponseInfo, Error>, filename: &String) {
+    pub fn downloadv1(
+        req_info: &RequestInfo,
+        resp_info: Result<ResponseInfo, Error>,
+        filename: &String,
+    ) {
         match resp_info {
             Ok(resp_info) => {
                 dbg!(&resp_info);
