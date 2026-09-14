@@ -19,26 +19,37 @@ pub struct FileInfo {
     pub file_name: String,
 }
 
-/// Function that sends a head requests and returns FileInfo.
+/// Function that sends a 1-byte range request (Range: bytes=0-0) to probe
+/// file metadata and range support without triggering HEAD request blocks.
 pub async fn get_file_info(client: Client, url: &str) -> Result<FileInfo, anyhow::Error> {
-    let resp = client.head(url).send().await.unwrap();
-    println!("{:?}", resp);
-    let content_length: u64 = resp
-        .headers()
-        .get("content-length")
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .parse()
-        .unwrap();
-    println!("CONTENT_LENGTH (inside get_file_info): {}", content_length);
+    let resp = client.get(url).header("Range", "bytes=0-0").send().await?;
 
-    let accept_ranges = match resp.headers().get("accept-ranges") {
-        Some(val) => val.to_str().unwrap_or("").eq_ignore_ascii_case("bytes"),
-        _ => false,
+    let status = resp.status();
+    let headers = resp.headers();
+
+    let (content_length, accept_ranges) = if status == reqwest::StatusCode::PARTIAL_CONTENT {
+        let total_size = headers
+            .get("content-range")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|cr| cr.split('/').nth(1))
+            .and_then(|total| total.parse::<u64>().ok())
+            .unwrap_or(0);
+
+        (total_size, true)
+    } else {
+        let length = headers
+            .get("content-length")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|cl| cl.parse::<u64>().ok())
+            .unwrap_or(0);
+
+        (length, false)
     };
 
-    let file_name = resolve_filename(resp.headers());
+    println!("CONTENT_LENGTH (inside get_file_info): {}", content_length);
+    println!("ACCEPT_RANGES: {}", accept_ranges);
+
+    let file_name = resolve_filename(headers);
 
     Ok(FileInfo {
         content_length,
