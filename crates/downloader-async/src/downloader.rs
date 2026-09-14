@@ -38,18 +38,7 @@ pub async fn get_file_info(client: Client, url: &str) -> Result<FileInfo, anyhow
         _ => false,
     };
 
-    let file_name = resp
-        .headers()
-        .get("content-disposition")
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .split("filename=")
-        .nth(1)
-        .unwrap()
-        .trim_matches('"')
-        .trim_matches(';')
-        .to_string();
+    let file_name = resolve_filename(resp.headers());
 
     Ok(FileInfo {
         content_length,
@@ -134,4 +123,29 @@ pub async fn spawn_download_tasks(
     println!("Joining all Handles...");
     join_all(handles).await;
     println!("Done Downloading");
+}
+
+fn resolve_filename(headers: &HeaderMap) -> String {
+    headers
+        .get("content-disposition")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|cd| cd.split("filename=").nth(1))
+        .map(|name| name.trim_matches('"').trim_matches(';').trim().to_string())
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| fallback_filename(headers))
+}
+
+fn fallback_filename(headers: &HeaderMap) -> String {
+    let ext = headers
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|ct| ct.split(';').next())
+        .map(str::trim)
+        .and_then(|mime| mime_guess::get_mime_extensions_str(mime))
+        .and_then(|exts| exts.first().copied());
+
+    match ext {
+        Some(extension) => format!("download.{extension}"),
+        None => "download".to_string(),
+    }
 }
