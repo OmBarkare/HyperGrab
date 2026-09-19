@@ -12,3 +12,4 @@ axum = "0.8.6"
 serde = { version = "1.0.228", features = ["derive"] }
 dirs = "6.0.0"
 mime_guess = "2.0"
+fs2 = "0.4.3"

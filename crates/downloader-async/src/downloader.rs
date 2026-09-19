@@ -4,14 +4,14 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-
+use fs2::FileExt;
 use futures::{StreamExt, future::join_all};
 use reqwest::{
     self, Client, ClientBuilder,
     header::{HeaderMap, HeaderName, HeaderValue},
 };
 use tokio::{
-    fs::{File, OpenOptions},
+    fs::{OpenOptions},
     io::{AsyncSeekExt, AsyncWriteExt, BufWriter},
 };
 
@@ -318,8 +318,11 @@ pub async fn spawn_download_tasks(
 ) {
     let start_time = Instant::now();
 
-    let file = File::create(file_path).await.unwrap();
-    file.set_len(file_info.content_length).await.unwrap();
+    let file = std::fs::File::create(file_path).unwrap();
+    if let Err(e) = file.allocate(file_info.content_length) {
+        eprint!("Could not allocate disk space: {e}");
+        panic!();
+    }
     drop(file);
 
     const CHUNK_SIZE: u64 = 16 * 1024 * 1024; // 16MB
