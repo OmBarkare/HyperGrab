@@ -9,6 +9,7 @@ const MIN_REQUEST_INTERVAL: Duration = Duration::from_millis(250);
 const BASE_BACKOFF: Duration = Duration::from_secs(1);
 const MAX_BACKOFF: Duration = Duration::from_secs(16);
 const MAX_RETRIES: u32 = 5;
+const WRITE_BUFFER_SIZE: usize = 256 * 1024; // 256 KB write buffer
 
 use futures::{StreamExt, future::join_all};
 use reqwest::{
@@ -17,7 +18,7 @@ use reqwest::{
 };
 use tokio::{
     fs::{File, OpenOptions},
-    io::{AsyncSeekExt, AsyncWriteExt},
+    io::{AsyncSeekExt, AsyncWriteExt, BufWriter},
 };
 
 #[derive(Debug, Clone)]
@@ -263,6 +264,7 @@ pub async fn download_worker(
             continue;
         }
 
+        let mut writer = BufWriter::with_capacity(WRITE_BUFFER_SIZE, file);
         let mut bytes_stream = resp.bytes_stream();
         let mut downloaded_bytes: u64 = 0;
         let mut write_err = false;
@@ -271,7 +273,7 @@ pub async fn download_worker(
             match item {
                 Ok(bytes) => {
                     downloaded_bytes += bytes.len() as u64;
-                    if let Err(e) = file.write_all(&bytes).await {
+                    if let Err(e) = writer.write_all(&bytes).await {
                         eprintln!("Worker {worker_id} file write error: {e}");
                         write_err = true;
                         break;
