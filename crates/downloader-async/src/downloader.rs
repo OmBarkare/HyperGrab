@@ -323,7 +323,7 @@ pub async fn spawn_download_tasks(
     file.set_len(file_info.content_length).await.unwrap();
     drop(file);
 
-    const CHUNK_SIZE: u64 = 4 * 1024 * 1024; // 4MB chunks
+    const CHUNK_SIZE: u64 = 16 * 1024 * 1024; // 16MB
     let chunks = create_chunks(file_info.content_length, CHUNK_SIZE);
     let total_chunks = chunks.len();
     println!(
