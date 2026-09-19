@@ -18,7 +18,7 @@ use tokio::{
 const BASE_BACKOFF: Duration = Duration::from_secs(1);
 const MAX_BACKOFF: Duration = Duration::from_secs(16);
 const MAX_RETRIES: u32 = 5;
-const WRITE_BUFFER_SIZE: usize = 256 * 1024; // 256 KB write buffer
+const WRITE_BUFFER_SIZE: usize = 512 * 1024; // 256 KB write buffer
 
 /// A struct to store info we get from a head request
 /// currently, it is assumed that the server accepts ranges so there is no
