@@ -5,12 +5,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-const MIN_REQUEST_INTERVAL: Duration = Duration::from_millis(250);
-const BASE_BACKOFF: Duration = Duration::from_secs(1);
-const MAX_BACKOFF: Duration = Duration::from_secs(16);
-const MAX_RETRIES: u32 = 5;
-const WRITE_BUFFER_SIZE: usize = 256 * 1024; // 256 KB write buffer
-
 use futures::{StreamExt, future::join_all};
 use reqwest::{
     self, Client, ClientBuilder,
@@ -21,13 +15,10 @@ use tokio::{
     io::{AsyncSeekExt, AsyncWriteExt, BufWriter},
 };
 
-#[derive(Debug, Clone)]
-pub struct Chunk {
-    pub id: usize,
-    pub start: u64,
-    pub end: u64,
-    pub retries: u32,
-}
+const BASE_BACKOFF: Duration = Duration::from_secs(1);
+const MAX_BACKOFF: Duration = Duration::from_secs(16);
+const MAX_RETRIES: u32 = 5;
+const WRITE_BUFFER_SIZE: usize = 256 * 1024; // 256 KB write buffer
 
 /// A struct to store info we get from a head request
 /// currently, it is assumed that the server accepts ranges so there is no
@@ -36,6 +27,14 @@ pub struct FileInfo {
     pub content_length: u64,
     pub accept_ranges: bool,
     pub file_name: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct Chunk {
+    pub id: usize,
+    pub start: u64,
+    pub end: u64,
+    pub retries: u32,
 }
 
 /// Function that sends a 1-byte range request (Range: bytes=0-0) to probe
