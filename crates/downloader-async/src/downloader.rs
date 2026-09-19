@@ -197,12 +197,10 @@ pub async fn download_worker(
             chunk.id, chunk.start, chunk.end
         );
 
-        // Enforce minimum request spacing across all workers
         let delay = {
-            let mut next = next_request_time.lock().unwrap();
+            let next = next_request_time.lock().unwrap();
             let now = Instant::now();
-            let scheduled = (*next).max(now);
-            *next = scheduled + MIN_REQUEST_INTERVAL;
+            let scheduled = *next;
             scheduled.saturating_duration_since(now)
         };
 
