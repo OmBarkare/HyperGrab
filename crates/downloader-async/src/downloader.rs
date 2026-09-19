@@ -4,7 +4,7 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-use fs2::FileExt;
+use fs4::FileExt;
 use futures::{StreamExt, future::join_all};
 use reqwest::{
     self, Client, ClientBuilder,
