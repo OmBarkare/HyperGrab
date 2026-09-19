@@ -94,10 +94,10 @@ pub fn make_default_client(header_hashmap: &HashMap<String, String>) -> Client {
             continue;
         }
 
-        let name = HeaderName::from_str(&key).unwrap();
-        let value = HeaderValue::from_str(&val).unwrap();
-
-        head_map.insert(name, value);
+        head_map.insert(
+            HeaderName::from_str(key).unwrap(),
+            HeaderValue::from_str(val).unwrap(),
+        );
     }
 
     client_builder.default_headers(head_map).build().unwrap()
@@ -124,12 +124,11 @@ pub fn create_chunks(content_length: u64, chunk_size: u64) -> VecDeque<Chunk> {
 }
 
 fn calculate_backoff(retries: u32, headers: Option<&HeaderMap>) -> Duration {
-    if let Some(h) = headers {
-        if let Some(retry_after) = h.get("retry-after").and_then(|v| v.to_str().ok()) {
-            if let Ok(seconds) = retry_after.trim().parse::<u64>() {
-                return Duration::from_secs(seconds).min(MAX_BACKOFF);
-            }
-        }
+    if let Some(h) = headers
+        && let Some(retry_after) = h.get("retry-after").and_then(|v| v.to_str().ok())
+        && let Ok(seconds) = retry_after.trim().parse::<u64>()
+    {
+        return Duration::from_secs(seconds).min(MAX_BACKOFF);
     }
 
     let multiplier = 2u64.saturating_pow(retries);
@@ -149,7 +148,10 @@ fn handle_chunk_failure(
         let backoff = calculate_backoff(chunk.retries, headers);
         eprintln!(
             "Worker {worker_id} {reason} on chunk {}. Backing off for {:?} (retry {}/{})",
-            chunk.id, backoff, chunk.retries + 1, MAX_RETRIES
+            chunk.id,
+            backoff,
+            chunk.retries + 1,
+            MAX_RETRIES
         );
 
         {
@@ -287,6 +289,11 @@ pub async fn download_worker(
             }
         }
 
+        if !write_err && let Err(e) = writer.flush().await {
+            eprintln!("Worker {worker_id} file flush error: {e}");
+            write_err = true;
+        }
+
         if write_err {
             handle_chunk_failure(
                 chunk,
@@ -351,10 +358,7 @@ pub async fn spawn_download_tasks(
     println!("Joining all Handles...");
     join_all(handles).await;
     let elapsed = start_time.elapsed();
-    println!(
-        "Download finished in {:.2} seconds",
-        elapsed.as_secs_f64()
-    );
+    println!("Download finished in {:.2} seconds", elapsed.as_secs_f64());
 }
 
 fn resolve_filename(headers: &HeaderMap) -> String {
