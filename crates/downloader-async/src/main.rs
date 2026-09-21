@@ -7,26 +7,30 @@ mod server_task;
 struct Config {
     workers: usize,
     accept_invalid_certs: bool,
+    http2: bool,
 }
 
 fn parse_cli_args() -> Config {
     let args: Vec<String> = std::env::args().collect();
     let mut workers = 4;
     let mut accept_invalid_certs = false;
+    let mut http2 = false;
     let mut iter = args.iter().skip(1);
     while let Some(arg) = iter.next() {
         if (arg == "--worker" || arg == "-w")
             && let Some(n) = iter.next().and_then(|num| num.parse::<usize>().ok()).filter(|n| *n > 0 && *n <= 64)
         {
             workers = n;
-        }
-        if arg == "--accept-invalid-certs" {
+        } else if arg == "--accept-invalid-certs" {
             accept_invalid_certs = true;
+        } else if arg == "--http2" || arg == "-h2" {
+            http2 = true;
         }
     }
     Config {
         workers,
         accept_invalid_certs,
+        http2,
     }
 }
 

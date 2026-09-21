@@ -103,7 +103,11 @@ pub fn make_default_client(header_hashmap: &HashMap<String, String>, config: &Co
         );
     }
 
-    client_builder.http1_only().default_headers(head_map).build().unwrap()
+    if config.http2 {
+        client_builder.default_headers(head_map).build().unwrap()
+    } else {
+        client_builder.http1_only().default_headers(head_map).build().unwrap()
+    }
 }
 
 pub fn create_chunks(content_length: u64, chunk_size: u64) -> VecDeque<Chunk> {
