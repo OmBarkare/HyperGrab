@@ -5,27 +5,36 @@ use tokio::sync::mpsc;
 mod downloader;
 mod server_task;
 
-fn parse_num_workers() -> usize {
+struct Config {
+    workers: usize,
+    accept_invalid_certs: bool,
+}
+
+fn parse_cli_args() -> Config {
     let args: Vec<String> = std::env::args().collect();
+    let mut workers = 4;
+    let mut accept_invalid_certs = false;
     let mut iter = args.iter().skip(1);
     while let Some(arg) = iter.next() {
-        if arg == "-w" || arg == "--workers" {
-            if let Some(val) = iter.next() {
-                if let Ok(n) = val.parse::<usize>() {
-                    if n > 0 {
-                        return n;
-                    }
-                }
-            }
+        if (arg == "--worker" || arg == "-w")
+            && let Some(n) = iter.next().and_then(|num| num.parse::<usize>().ok()).filter(|n| *n > 0 && *n <= 64)
+        {
+            workers = n;
+        }
+        if arg == "--accept-invalid-certs" {
+            accept_invalid_certs = true;
         }
     }
-    return 4
+    Config {
+        workers,
+        accept_invalid_certs,
+    }
 }
 
 #[tokio::main]
 async fn main() {
-    let num_workers = parse_num_workers();
-    println!("Hello async world ! (Workers: {num_workers})");
+    let config = parse_cli_args();
+    println!("Hello async world ! (Workers: {})", config.workers);
 
     let (tx, mut rx) = mpsc::channel(16);
     let server_handle = tokio::spawn(async move {
@@ -36,7 +45,7 @@ async fn main() {
     let downloades_dir = dirs::download_dir().unwrap();
     let downloades_dir = downloades_dir.to_str().unwrap();
     while let Some(res) = rx.recv().await {
-        let def_client = make_default_client(&res.headers);
+        let def_client = make_default_client(&res.headers, &config);
         let file_info = get_file_info(def_client.clone(), &res.url).await.unwrap();
         println!("CONTENT_LENGTH (in main): {}", file_info.content_length);
         let file_path = format!("{}/{}", downloades_dir, file_info.file_name);
@@ -46,7 +55,7 @@ async fn main() {
             &res.url,
             file_info,
             &file_path,
-            num_workers,
+            &config,
         )
         .await;
     }

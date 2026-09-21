@@ -14,6 +14,7 @@ use tokio::{
     fs::{OpenOptions},
     io::{AsyncSeekExt, AsyncWriteExt, BufWriter},
 };
+use crate::Config;
 
 const BASE_BACKOFF: Duration = Duration::from_secs(1);
 const MAX_BACKOFF: Duration = Duration::from_secs(16);
@@ -78,7 +79,7 @@ pub async fn get_file_info(client: Client, url: &str) -> Result<FileInfo, anyhow
 
 /// makes and returns a client with headers that you pass as a
 /// hasmap
-pub fn make_default_client(header_hashmap: &HashMap<String, String>) -> Client {
+pub fn make_default_client(header_hashmap: &HashMap<String, String>, config: &Config) -> Client {
     let mut head_map = HeaderMap::new();
     let client_builder = ClientBuilder::new();
     for (key, val) in header_hashmap {
@@ -314,7 +315,7 @@ pub async fn spawn_download_tasks(
     url: &str,
     file_info: FileInfo,
     file_path: &str,
-    num_workers: usize,
+    config: &Config,
 ) {
     let start_time = Instant::now();
 
@@ -330,14 +331,14 @@ pub async fn spawn_download_tasks(
     let total_chunks = chunks.len();
     println!(
         "Total chunks to download: {} (using {} workers)",
-        total_chunks, num_workers
+        total_chunks, config.workers
     );
 
     let queue = Arc::new(Mutex::new(chunks));
     let next_request_time = Arc::new(Mutex::new(Instant::now()));
     let mut handles = Vec::new();
 
-    for worker_id in 0..num_workers {
+    for worker_id in 0..config.workers {
         let client = client.clone();
         let url = url.to_string();
         let file_path = file_path.to_string();
