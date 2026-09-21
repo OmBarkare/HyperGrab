@@ -1,5 +1,4 @@
 use crate::downloader::{get_file_info, make_default_client, spawn_download_tasks};
-use dirs;
 use tokio::sync::mpsc;
 
 mod downloader;
