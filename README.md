@@ -38,12 +38,74 @@ This is a learning project where I am learning about network protocols and serve
 
 ---
 
+## Benchmark Results
+
+### Setting Up For The Benchmark
+Benchmarks were performed on a local nginx server which limits rate to 1m.
+Here is the server config:
+```
+server {
+	listen 443 ssl;
+	http2 on;
+	server_name localhost;
+	
+	ssl_certificate /etc/nginx/localhost.crt;
+	ssl_certificate_key /etc/nginx/localhost.key;
+	
+	location /testfile.bin {
+		root /var/www/speedtest;
+		limit_rate 1m;
+	}
+}
+```
+
+- I created a certificate using
+```
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+-keyout /etc/nginx/localhost.key \
+-out /etc/nginx/localhost.crt \
+-subj "/CN=localhost"
+```
+
+- To simulate latency in network, I used `tc`
+`tc qdisc add dev lo root netem delay 40ms`
+
+You will probably have to run above two commands with `sudo`
+
+### Benchmark Results
+
+```
+================================================================================
+BENCHMARK & CAPTURE SUMMARY
+Timestamp: 2026-09-22 02:50:00
+Target:    https://localhost/testfile.bin
+================================================================================
+Protocol   | Workers  | Avg Time   | Min / Max Time     | Avg Speed
+--------------------------------------------------------------------------------
+HTTP/1.1   | 4        | 32.36    s | 32.31s / 32.43s    | 3.09       MB/s
+HTTP/1.1   | 6        | 20.16    s | 20.13s / 20.20s    | 4.96       MB/s
+HTTP/1.1   | 8        | 17.32    s | 16.31s / 21.21s    | 5.77       MB/s
+HTTP/2     | 4        | 78.27    s | 39.84s / 122.56s   | 1.28       MB/s
+HTTP/2     | 6        | 81.36    s | 52.39s / 126.74s   | 1.23       MB/s
+HTTP/2     | 8        | 82.90    s | 20.80s / 124.04s   | 1.21       MB/s
+================================================================================
+
+Captures Directory: /home/omomo/nomomon/projects/HyperGrab/scratch/
+TLS Keylog File:    /tmp/sslkeylogfile.txt
+```
+
+#### Insights
+- HTTP/1.1 download speed increases with increase in number of workers, which is intuitive as each worker opens a new connection
+- HTTP/2 download speed has a large std deviation. This is because all workers share the same TCP connection, and hence share the same receive-window. This window is dynamically managed by the kernel's network stack. On good runs, the workers happen to pull bytes fast enough (somehow, still looking into how it happens. I think it has got to do with how the tasks get scheduled by the tokio scheduler, currently looking into it :) ) so the kernel keeps growing the sk_rcvbuf (the receive buffer size, which leads to increased receive-window size). On bad runs, the workers are not able to cross some maximum threshold of reading speed, and hence the sk_rcvbuf does not grow.
+
 ## What to implement next
 
 - Download progress in cli
 - Heuristic-based chunk sizing & worker scaling
 - Pausable and resumable downloads across sessions
 
+> [!NOTE]
+> the code for attaching a keylogger and all of its implementation in tls.rs is written by AI (gemini 3.8 flash)
 ---
 
 ## Installation & Setup
