@@ -30,33 +30,11 @@ This is a learning project where I am learning about network protocols and serve
 
 ---
 
-## Architecture Overview
+## High-Level Architecture Overview
 
-```
-[Browser Extension (Chrome / Firefox)]
-                 │
-                 │ JSON Payload (URL, Headers)
-                 ▼
-     [Axum Local Server (127.0.0.1:7878)]
-                 │
-                 ▼
-       [1-Byte Range Probe] ───► Determines size, range support, filename
-                 │
-                 ▼
-        [Disk Pre-allocation] ───► fallocate() contiguous disk space
-                 │
-                 ▼
-      [Work-Stealing Queue] ───► Arc<Mutex<VecDeque<Chunk>>>
-                 │
-        ┌────────┴────────┬────────────────┐
-        ▼                 ▼                ▼
-   [Worker 0]        [Worker 1]  ...  [Worker N]
-  (BufWriter)       (BufWriter)      (BufWriter)
-        │                 │                │
-        └────────┬────────┴────────────────┘
-                 ▼
-      [Single Output File]
-```
+<p aligne="center">
+    <img src="assets/HyperGrab-high-level-flow.svg" />
+</p>
 
 ---
 
@@ -72,11 +50,6 @@ This is a learning project where I am learning about network protocols and serve
 
 ### Prerequisites
 - **Rust toolchain** (latest stable)
-- **OpenSSL** development headers (if building with `native-tls`):
-  ```bash
-  # Debian/Ubuntu
-  sudo apt install libssl-dev pkg-config
-  ```
 
 ### Building from Source
 
@@ -108,13 +81,16 @@ HyperGrab integrates with your browser via an extension that intercepts download
 
 ### Step 2: Start the Downloader Service
 
-You will find the target directory in root of directory of the project
+You will find the target directory in root of directory
 
 ```bash
 # Default (4 workers)
 `target/release/downloader-async`
 # Custom worker count
 `target/release/downloader-async -w <worker_cout>`
+
+# OR use this for usage Info
+`target/release/downloader-async --help`
 ```
 
 ### Step 3: Download

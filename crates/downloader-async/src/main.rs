@@ -3,6 +3,7 @@ use tokio::sync::mpsc;
 
 mod downloader;
 mod server_task;
+pub mod tls;
 
 pub struct Config {
     pub workers: usize,

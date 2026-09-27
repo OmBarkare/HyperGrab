@@ -13,3 +13,7 @@ serde = { version = "1.0.228", features = ["derive"] }
 dirs = "6.0.0"
 mime_guess = "2.0"
 fs4 = "1.1.0"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "logging"] }
+rustls-pki-types = "1.12"
+webpki-roots = "1.0"
+

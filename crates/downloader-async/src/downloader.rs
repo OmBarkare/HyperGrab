@@ -81,10 +81,9 @@ pub async fn get_file_info(client: Client, url: &str) -> Result<FileInfo, anyhow
 /// hasmap
 pub fn make_default_client(header_hashmap: &HashMap<String, String>, config: &Config) -> Client {
     let mut head_map = HeaderMap::new();
-    let mut client_builder = ClientBuilder::new().use_rustls_tls();
-    if config.accept_invalid_certs {
-        client_builder = client_builder.danger_accept_invalid_certs(true);
-    }
+    let tls_config = crate::tls::create_rustls_config(config.accept_invalid_certs, config.http2);
+    let mut client_builder = ClientBuilder::new()
+        .use_preconfigured_tls(tls_config);
     for (key, val) in header_hashmap {
         if key.starts_with(':')
             || key.eq_ignore_ascii_case("host")
