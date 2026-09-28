@@ -8,13 +8,13 @@ This is a learning project where I am learning about network protocols and serve
 
 ## Brief Overview of Implementation
 
-### 1. Work-Stealing Task Queue
-- Implement a **work-stealing queue** (`VecDeque<Chunk>`). Faster workers automatically grab new chunks as they finish, preventing slow connections or stragglers from delaying the overall download.
+### 1. Shared-Work Queue
+- Implement a **Shared work** (`VecDeque<Chunk>`). Faster workers automatically grab new chunks as they finish, preventing slow connections or stragglers from delaying the overall download.
 - Configurable worker count via flags (`-w`, `--workers`).
 
 ### 2. Disk I/O
 - Previously `tokio::fs::File::set_len()` was used which only changes the logical size of the file creating a sparse file, causing disk allocations to occur at the time of writing chunks to disk. Replace that with `fs4::FileExt::allocate()` which uses `posix_fallocate` under the hood to reserve space on disk
-- instead of writing to disk on every return from `bytes_stream().next().await`, use `BufWriter` to buffer bytes in memory before making the write syscall. This reduces the number of context switches by nearly 99% (considering 512KB buffer and 4KB result from bytes_stream)
+- instead of writing to disk on every return from `bytes_stream().next().await`, use `BufWriter` to buffer bytes in memory before making the write syscall. This reduces the number of context switches.
 
 ### 3. Protocol & Network Tuning
 - Use HTTP/1.1 always, instead of trying for HTTP/2, so that each worker has their own contention window, do not suffer from HoL blocking due to other workers and are truly independent as their stream is a separate connection.
